@@ -1,7 +1,9 @@
 import { Injectable, signal } from '@angular/core';
 import { SheetNames } from '../resources/SheetNames';
 import { RowNames } from '../resources/RowNames';
-import { ExcelSheet, BookkeepingRow } from '../resources/Models/ExcelSheet';
+import { ExcelSheet } from '../resources/Models/ExcelSheet';
+import { BookkeepingRow } from '../resources/Models/BookkeepingRow';
+import { BookkeepingFile } from '../resources/Models/BookkeepingFile';
 
 import * as XLSX from 'xlsx';
 
@@ -32,6 +34,11 @@ export class BookkeepingCheckerService {
 
       this.bookkeepingSheet.set(new ExcelSheet(bookkeepingNormalizedRows));
       this.bankSheet.set(new ExcelSheet(bankNormalizedRows));
+
+      const test = new BookkeepingFile(
+        this.bookkeepingSheet(),
+        this.bankSheet()
+      );
 
       this.HandleSummation(workBook);
 
@@ -74,9 +81,9 @@ export class BookkeepingCheckerService {
   CreateNewDocument(file: File) {
     const matchesSheet = XLSX.utils.json_to_sheet(this.matchedRows());
     const bookkeepingSheet = XLSX.utils.json_to_sheet(
-      this.bookkeepingSheet().rows
+      this.bookkeepingSheet().rows()
     );
-    const bankSheet = XLSX.utils.json_to_sheet(this.bankSheet().rows);
+    const bankSheet = XLSX.utils.json_to_sheet(this.bankSheet().rows());
 
     let newWorkbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(newWorkbook, matchesSheet, SheetNames.Matches);
@@ -91,8 +98,8 @@ export class BookkeepingCheckerService {
   }
 
   HandleSummation(workBook: XLSX.WorkBook) {
-    let bankDates = this.bankSheet().dateMap;
-    let bookkeepingDates = this.bookkeepingSheet().dateMap;
+    let bankDates = this.bankSheet().dateMap();
+    let bookkeepingDates = this.bookkeepingSheet().dateMap();
     let remainingBookkeepingSheet: BookkeepingRow[] = [];
     let remainingBankSheet: BookkeepingRow[] = [];
     let matches: BookkeepingRow[] = [];
@@ -157,9 +164,7 @@ export class BookkeepingCheckerService {
       remainingBankSheet.push(newRow);
     });
 
-    let prev = this.bookkeepingSheet();
-    prev.rows = remainingBookkeepingSheet;
-    this.bookkeepingSheet.set(prev);
+    this.bookkeepingSheet().SetRows(remainingBookkeepingSheet);
 
     this.matchedRows.set(matches);
   }

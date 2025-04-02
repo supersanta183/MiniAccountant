@@ -1,17 +1,27 @@
+import { signal } from '@angular/core';
 import { RowNames } from '../RowNames';
+import { BookkeepingRow } from './BookkeepingRow';
 
 export class ExcelSheet {
-  public rows: BookkeepingRow[];
-  public dateMap: Map<string, BookkeepingRow[]>;
+  public rows = signal<BookkeepingRow[]>([]);
+  public dateMap = signal<Map<string, BookkeepingRow[]>>(new Map());
 
   constructor(rows: BookkeepingRow[]) {
-    this.rows = rows;
-    this.dateMap = this.CreateDateMap();
+    this.rows.set(rows);
+    this.dateMap.set(this.CreateDateMap());
+  }
+
+  public AppendRows(rows: BookkeepingRow[]) {
+    this.rows.update((prev) => [...prev, ...rows]);
+  }
+
+  public SetRows(rows: BookkeepingRow[]) {
+    this.rows.set(rows);
   }
 
   private CreateDateMap(): Map<string, BookkeepingRow[]> {
     let dateTransfers: Map<string, BookkeepingRow[]> = new Map();
-    this.rows.forEach((row) => {
+    this.rows().forEach((row) => {
       const date = row[RowNames.Date];
       if (!dateTransfers.has(date)) {
         dateTransfers.set(date, []);
@@ -20,21 +30,5 @@ export class ExcelSheet {
     });
 
     return dateTransfers;
-  }
-}
-
-export interface BookkeepingRow {
-  [RowNames.Date]: string;
-  [RowNames.Amount]: number;
-  [RowNames.Issuer]: string;
-}
-
-class TestSheet {
-  private bookkeepingSheet: ExcelSheet;
-  private bankSheet: ExcelSheet;
-
-  constructor(bookkeepingSheet: ExcelSheet, bankSheet: ExcelSheet) {
-    this.bookkeepingSheet = bookkeepingSheet;
-    this.bankSheet = bankSheet;
   }
 }
