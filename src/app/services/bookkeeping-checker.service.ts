@@ -12,14 +12,8 @@ export class BookkeepingCheckerService {
   file: File | null = null;
 
   // A list of all bookkeeping entries
-  bookkeepingSheet = signal<ExcelSheet>({
-    rows: [],
-    dateMap: new Map(),
-  });
-  bankSheet = signal<ExcelSheet>({
-    rows: [],
-    dateMap: new Map(),
-  });
+  bookkeepingSheet = signal<ExcelSheet>(new ExcelSheet([]));
+  bankSheet = signal<ExcelSheet>(new ExcelSheet([]));
 
   // A list of exact matches in the bookkeeping sheet and the bank sheet
   matchedRows = signal<BookkeepingRow[]>([]);
@@ -34,22 +28,10 @@ export class BookkeepingCheckerService {
         workBook,
         SheetNames.BookKeeping
       );
-
       const bankNormalizedRows = this.NormalizeRows(workBook, SheetNames.Bank);
 
-      const bookkeepingSheet = this.bookkeepingSheet();
-      const bankSheet = this.bankSheet();
-      bookkeepingSheet.rows = bookkeepingNormalizedRows[0];
-      bankSheet.rows = bankNormalizedRows[0];
-
-      const bookkeepingDateMap = this.CreateDateMap(bookkeepingSheet);
-      const bankDateMap = this.CreateDateMap(bankSheet);
-
-      bookkeepingSheet.dateMap = bookkeepingDateMap;
-      bankSheet.dateMap = bankDateMap;
-
-      this.bookkeepingSheet.set(bookkeepingSheet);
-      this.bankSheet.set(bankSheet);
+      this.bookkeepingSheet.set(new ExcelSheet(bookkeepingNormalizedRows));
+      this.bankSheet.set(new ExcelSheet(bankNormalizedRows));
 
       this.HandleSummation(workBook);
 
@@ -60,10 +42,7 @@ export class BookkeepingCheckerService {
   }
 
   // normalizes all rows with lower case names
-  NormalizeRows(
-    workbook: XLSX.WorkBook,
-    sheetName: string
-  ): [BookkeepingRow[], Map<string, BookkeepingRow[]>] {
+  NormalizeRows(workbook: XLSX.WorkBook, sheetName: string): BookkeepingRow[] {
     const sheet = workbook.Sheets[sheetName];
 
     // A list of all rows in the sheet
@@ -89,29 +68,7 @@ export class BookkeepingCheckerService {
       return normalizedRow as BookkeepingRow;
     });
 
-    let dateTransfers: Map<string, BookkeepingRow[]> = new Map();
-    rows.forEach((row) => {
-      const date = row[RowNames.Date];
-      if (!dateTransfers.has(date)) {
-        dateTransfers.set(date, []);
-      }
-      dateTransfers.get(date)!.push(row);
-    });
-
-    return [rows, dateTransfers];
-  }
-
-  CreateDateMap(sheet: ExcelSheet): Map<string, BookkeepingRow[]> {
-    let dateTransfers: Map<string, BookkeepingRow[]> = new Map();
-    sheet.rows.forEach((row) => {
-      const date = row[RowNames.Date];
-      if (!dateTransfers.has(date)) {
-        dateTransfers.set(date, []);
-      }
-      dateTransfers.get(date)!.push(row);
-    });
-
-    return dateTransfers;
+    return rows;
   }
 
   CreateNewDocument(file: File) {
@@ -200,11 +157,9 @@ export class BookkeepingCheckerService {
       remainingBankSheet.push(newRow);
     });
 
-    const prev = this.bookkeepingSheet();
-    this.bookkeepingSheet.set({
-      ...prev,
-      rows: remainingBookkeepingSheet,
-    });
+    let prev = this.bookkeepingSheet();
+    prev.rows = remainingBookkeepingSheet;
+    this.bookkeepingSheet.set(prev);
 
     this.matchedRows.set(matches);
   }
