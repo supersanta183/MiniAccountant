@@ -4,7 +4,6 @@ import { ExcelSheet } from './ExcelSheet';
 export class BookkeepingFile {
   public bookkeepingSheet = signal<ExcelSheet>(new ExcelSheet([]));
   public bankSheet = signal<ExcelSheet>(new ExcelSheet([]));
-  public num = signal<number>(0);
 
   constructor(bookkeepingSheet: ExcelSheet, bankSheet: ExcelSheet) {
     this.bookkeepingSheet.set(bookkeepingSheet);
