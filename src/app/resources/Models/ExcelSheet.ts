@@ -15,8 +15,33 @@ export class ExcelSheet {
     this.rows.update((prev) => [...prev, ...rows]);
   }
 
+  public PushRow(row: BookkeepingRow) {
+    this.rows.update((prev) => [...prev, row]);
+  }
+
   public SetRows(rows: BookkeepingRow[]) {
     this.rows.set(rows);
+  }
+
+  public SetDateMapValue(date: string, value: BookkeepingRow[]) {
+    const map = this.dateMap();
+    map.set(date, value);
+    this.dateMap.set(map);
+  }
+
+  public GetSumForDate(date: string) {
+    const rows = this.dateMap().get(date);
+
+    if (rows === undefined) {
+      return 0;
+    }
+
+    let sum: number = 0;
+    rows.forEach((row) => {
+      sum = sum + row[RowNames.Amount];
+    });
+
+    return sum;
   }
 
   private CreateDateMap(): Map<string, BookkeepingRow[]> {
