@@ -205,7 +205,7 @@ export class BookkeepingCheckerService {
       remainingBankSheet.push(newRow);
     });
     this.bookkeepingSheet.set(remainingBookkeepingSheet);
-    this.bankSheet.set(remainingBankSheet);
+    //this.bankSheet.set(remainingBankSheet);
     this.matchedRows.set(matches);
   }
 
