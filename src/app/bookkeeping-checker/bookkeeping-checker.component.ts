@@ -29,7 +29,7 @@ export class BookkeepingCheckerComponent {
         file.name.endsWith('.xlsm'))
     ) {
       console.log('Selected file:', file.name);
-      this.bookkeepingCheckerService.CheckBookKeeping(file);
+      this.bookkeepingCheckerService.HandleBookkeeping(file);
       // Here you can process the file (e.g., using xlsx library)
     } else {
       console.warn('Invalid file type');

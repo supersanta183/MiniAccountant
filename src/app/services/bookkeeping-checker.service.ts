@@ -1,52 +1,57 @@
 import { Injectable, signal } from '@angular/core';
 import { SheetNames } from '../resources/SheetNames';
 import { RowNames } from '../resources/RowNames';
+import { ExcelSheet, BookkeepingRow } from '../resources/Models/ExcelSheet';
 
 import * as XLSX from 'xlsx';
-
-interface BookkeepingRow {
-  [RowNames.Date]: string;
-  [RowNames.Amount]: number;
-  [RowNames.Issuer]: string;
-}
 
 @Injectable({
   providedIn: 'root',
 })
 export class BookkeepingCheckerService {
   file: File | null = null;
-  bookkeepingSheet = signal<BookkeepingRow[]>([]);
-  bookkeepingDateMap = signal<Map<string, BookkeepingRow[]>>(new Map());
-  bankSheet = signal<BookkeepingRow[]>([]);
-  bankDateMap = signal<Map<string, BookkeepingRow[]>>(new Map());
+
+  // A list of all bookkeeping entries
+  bookkeepingSheet = signal<ExcelSheet>({
+    rows: [],
+    dateMap: new Map(),
+  });
+  bankSheet = signal<ExcelSheet>({
+    rows: [],
+    dateMap: new Map(),
+  });
+
+  // A list of exact matches in the bookkeeping sheet and the bank sheet
   matchedRows = signal<BookkeepingRow[]>([]);
 
-  CheckBookKeeping(file: File) {
+  HandleBookkeeping(file: File) {
     const reader = new FileReader();
     reader.onload = (e: any) => {
       const data = new Uint8Array(e.target.result);
       const workBook = XLSX.read(data, { type: 'array' });
 
-      var bookkeepingNormalizedRows = this.getSheetNormalizeRows(
+      const bookkeepingNormalizedRows = this.NormalizeRows(
         workBook,
         SheetNames.BookKeeping
       );
 
-      var bankNormalizedRows = this.getSheetNormalizeRows(
-        workBook,
-        SheetNames.Bank
-      );
+      const bankNormalizedRows = this.NormalizeRows(workBook, SheetNames.Bank);
 
-      this.bookkeepingSheet.set(bookkeepingNormalizedRows[0]);
-      this.bookkeepingDateMap.set(bookkeepingNormalizedRows[1]);
-      this.bankSheet.set(bankNormalizedRows[0]);
-      this.bankDateMap.set(bankNormalizedRows[1]);
+      const bookkeepingSheet = this.bookkeepingSheet();
+      const bankSheet = this.bankSheet();
+      bookkeepingSheet.rows = bookkeepingNormalizedRows[0];
+      bankSheet.rows = bankNormalizedRows[0];
 
-      //this.findMatches(workBook);
+      const bookkeepingDateMap = this.CreateDateMap(bookkeepingSheet);
+      const bankDateMap = this.CreateDateMap(bankSheet);
+
+      bookkeepingSheet.dateMap = bookkeepingDateMap;
+      bankSheet.dateMap = bankDateMap;
+
+      this.bookkeepingSheet.set(bookkeepingSheet);
+      this.bankSheet.set(bankSheet);
+
       this.HandleSummation(workBook);
-
-      console.log(this.bookkeepingSheet());
-      console.log(this.bankSheet());
 
       this.CreateNewDocument(file);
     };
@@ -54,17 +59,20 @@ export class BookkeepingCheckerService {
     reader.readAsArrayBuffer(file);
   }
 
-  getSheetNormalizeRows(
+  // normalizes all rows with lower case names
+  NormalizeRows(
     workbook: XLSX.WorkBook,
     sheetName: string
   ): [BookkeepingRow[], Map<string, BookkeepingRow[]>] {
     const sheet = workbook.Sheets[sheetName];
 
+    // A list of all rows in the sheet
     const rawRows = XLSX.utils.sheet_to_json<BookkeepingRow>(sheet, {
       defval: '',
       raw: false,
     });
 
+    // A list of all rows in the sheet with normalized keys
     const rows = rawRows.map((row) => {
       const normalizedRow: any = {};
 
@@ -93,35 +101,25 @@ export class BookkeepingCheckerService {
     return [rows, dateTransfers];
   }
 
-  findMatches(workBook: XLSX.WorkBook) {
-    let remainingBookkeepingSheet: BookkeepingRow[] = this.bookkeepingSheet();
-    let remainingBankSheet: BookkeepingRow[] = [];
-    let matches: BookkeepingRow[] = [];
-
-    this.bankSheet().forEach((bankRow) => {
-      const matchIndex = remainingBookkeepingSheet.findIndex(
-        (b) =>
-          b[RowNames.Amount] === bankRow[RowNames.Amount] &&
-          b[RowNames.Date] === bankRow[RowNames.Date]
-      );
-
-      if (!(matchIndex === -1)) {
-        matches.push(bankRow);
-        remainingBookkeepingSheet.splice(matchIndex, 1);
-      } else {
-        remainingBankSheet.push(bankRow);
+  CreateDateMap(sheet: ExcelSheet): Map<string, BookkeepingRow[]> {
+    let dateTransfers: Map<string, BookkeepingRow[]> = new Map();
+    sheet.rows.forEach((row) => {
+      const date = row[RowNames.Date];
+      if (!dateTransfers.has(date)) {
+        dateTransfers.set(date, []);
       }
+      dateTransfers.get(date)!.push(row);
     });
 
-    this.bookkeepingSheet.set(remainingBookkeepingSheet);
-    this.bankSheet.set(remainingBankSheet);
-    this.matchedRows.set(matches);
+    return dateTransfers;
   }
 
   CreateNewDocument(file: File) {
     const matchesSheet = XLSX.utils.json_to_sheet(this.matchedRows());
-    const bookkeepingSheet = XLSX.utils.json_to_sheet(this.bookkeepingSheet());
-    const bankSheet = XLSX.utils.json_to_sheet(this.bankSheet());
+    const bookkeepingSheet = XLSX.utils.json_to_sheet(
+      this.bookkeepingSheet().rows
+    );
+    const bankSheet = XLSX.utils.json_to_sheet(this.bankSheet().rows);
 
     let newWorkbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(newWorkbook, matchesSheet, SheetNames.Matches);
@@ -136,8 +134,8 @@ export class BookkeepingCheckerService {
   }
 
   HandleSummation(workBook: XLSX.WorkBook) {
-    let bankDates = this.bankDateMap();
-    let bookkeepingDates = this.bookkeepingDateMap();
+    let bankDates = this.bankSheet().dateMap;
+    let bookkeepingDates = this.bookkeepingSheet().dateMap;
     let remainingBookkeepingSheet: BookkeepingRow[] = [];
     let remainingBankSheet: BookkeepingRow[] = [];
     let matches: BookkeepingRow[] = [];
@@ -169,9 +167,6 @@ export class BookkeepingCheckerService {
           associatedBanking
         );
         const prevMatches = matches;
-        console.log('prevmatches');
-        console.log(prevMatches);
-        console.log(matches);
         matches = [...prevMatches, ...result[0]];
 
         //sum up bookkeeping results
@@ -204,8 +199,13 @@ export class BookkeepingCheckerService {
       }
       remainingBankSheet.push(newRow);
     });
-    this.bookkeepingSheet.set(remainingBookkeepingSheet);
-    //this.bankSheet.set(remainingBankSheet);
+
+    const prev = this.bookkeepingSheet();
+    this.bookkeepingSheet.set({
+      ...prev,
+      rows: remainingBookkeepingSheet,
+    });
+
     this.matchedRows.set(matches);
   }
 
