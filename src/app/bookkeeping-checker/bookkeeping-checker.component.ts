@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { BookkeepingCheckerService } from '../services/bookkeeping-checker.service';
-import { SheetNames } from '../resources/sheetNames';
+import { SheetNames } from '../resources/SheetNames';
 
 import * as XLSX from 'xlsx';
 
