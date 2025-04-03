@@ -5,10 +5,11 @@ import { BookkeepingRow } from './BookkeepingRow';
 export class ExcelSheet {
   public rows = signal<BookkeepingRow[]>([]);
   public dateMap = signal<Map<string, BookkeepingRow[]>>(new Map());
+  public dateAmountMap = signal<Map<string, number[]>>(new Map());
 
   constructor(rows: BookkeepingRow[]) {
     this.rows.set(rows);
-    this.dateMap.set(this.CreateDateMap());
+    this.CreateDateMap();
   }
 
   public AppendRows(rows: BookkeepingRow[]) {
@@ -29,6 +30,12 @@ export class ExcelSheet {
     this.dateMap.set(map);
   }
 
+  public SetDateAmountMapValue(date: string, value: number[]) {
+    const map = this.dateAmountMap();
+    map.set(date, value);
+    this.dateAmountMap.set(map);
+  }
+
   public GetSumForDate(date: string) {
     const rows = this.dateMap().get(date);
 
@@ -44,16 +51,31 @@ export class ExcelSheet {
     return sum;
   }
 
-  private CreateDateMap(): Map<string, BookkeepingRow[]> {
+  public RefreshRows() {
+    const dateMap = this.dateMap();
+    let rows: BookkeepingRow[] = [];
+    dateMap.forEach((date) => {
+      date.forEach((row) => rows.push(row));
+    });
+    this.SetRows(rows);
+  }
+
+  private CreateDateMap() {
     let dateTransfers: Map<string, BookkeepingRow[]> = new Map();
+    let dateAmountMap: Map<string, number[]> = new Map();
     this.rows().forEach((row) => {
       const date = row[RowNames.Date];
       if (!dateTransfers.has(date)) {
         dateTransfers.set(date, []);
       }
+      if (!dateAmountMap.has(date)) {
+        dateAmountMap.set(date, []);
+      }
       dateTransfers.get(date)!.push(row);
+      dateAmountMap.get(date)!.push(row[RowNames.Amount]);
     });
 
-    return dateTransfers;
+    this.dateMap.set(dateTransfers);
+    this.dateAmountMap.set(dateAmountMap);
   }
 }

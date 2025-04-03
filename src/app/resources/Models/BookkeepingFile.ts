@@ -26,16 +26,18 @@ export class BookkeepingFile {
           .dateMap()
           .get(date);
 
-        const bankSum = this.bankSheet().GetSumForDate(date);
-        const newRow = CreateBookkeepingRow(date, bankSum, 'System');
-
         //check if any transactions are available for date
         if (associatedBookkeepingTransactions === undefined) {
+          const bankSum = this.bankSheet().GetSumForDate(date);
+          const newRow = CreateBookkeepingRow(date, bankSum, 'System');
           remainingBookkeepingSheet.push(newRow);
         } else {
           // if transactions are available, check matches and then adjust sum difference in bookkeeping sheet
           this.FindAllMatchesForDate(date);
+          this.bookkeepingSheet().RefreshRows();
+          this.bankSheet().RefreshRows();
 
+          const bankSum = this.bankSheet().GetSumForDate(date);
           const bookkeepingSum = this.bookkeepingSheet().GetSumForDate(date);
           const diff = bankSum - bookkeepingSum;
           if (diff === 0) {
@@ -58,19 +60,28 @@ export class BookkeepingFile {
   }
 
   public FindAllMatchesForDate(date: string) {
+    console.log('hej');
     this.FindExactMatchesForDate(date);
-    this.FindPartialMatchesForDate(date);
+    console.log('hej2');
+    this.FindSubsetMatchesForDate(date);
+    console.log('hej3');
   }
 
   public FindExactMatchesForDate(date: string) {
     let associatedBankTransactions = this.bankSheet().dateMap().get(date);
+    let associateBankDateAmountMap = this.bankSheet().dateAmountMap().get(date);
+    let associateBookkeepingDateAmountMap = this.bookkeepingSheet()
+      .dateAmountMap()
+      .get(date);
     let associatedBookkeepingTransactions = this.bookkeepingSheet()
       .dateMap()
       .get(date);
 
     if (
       associatedBankTransactions === undefined ||
-      associatedBookkeepingTransactions === undefined
+      associatedBookkeepingTransactions === undefined ||
+      associateBankDateAmountMap === undefined ||
+      associateBookkeepingDateAmountMap === undefined
     ) {
       return;
     }
@@ -81,18 +92,118 @@ export class BookkeepingFile {
 
       if (matchIndex !== -1) {
         this.matches().PushRow(bankRow);
+        associateBookkeepingDateAmountMap.splice(matchIndex, 1);
         associatedBookkeepingTransactions.splice(matchIndex, 1);
         associatedBankTransactions.splice(index, 1);
+        associateBankDateAmountMap.splice(index, 1);
       }
     });
     this.bookkeepingSheet().SetDateMapValue(
       date,
       associatedBookkeepingTransactions
     );
+    this.bookkeepingSheet().SetDateAmountMapValue(
+      date,
+      associateBookkeepingDateAmountMap
+    );
     this.bankSheet().SetDateMapValue(date, associatedBankTransactions);
+    this.bankSheet().SetDateAmountMapValue(date, associateBankDateAmountMap);
   }
 
-  public FindPartialMatchesForDate(date: string) {}
+  public FindSubsetMatchesForDate(date: string) {
+    const bankSheet = this.bankSheet();
+    const bookkeepingSheet = this.bookkeepingSheet();
+
+    let associatedBankTransactions = bankSheet.dateMap().get(date);
+    let associatedBookkeepingTransactions = bookkeepingSheet
+      .dateMap()
+      .get(date);
+    let bookkeepingDateRows = bookkeepingSheet.dateAmountMap().get(date);
+    let bankDateRows = bankSheet.dateAmountMap().get(date);
+
+    if (
+      bookkeepingDateRows === undefined ||
+      bankDateRows === undefined ||
+      associatedBankTransactions === undefined ||
+      associatedBookkeepingTransactions === undefined
+    ) {
+      return;
+    }
+
+    // Continue until no further matches can be found.
+    let modified = true;
+    while (modified) {
+      modified = false;
+      // Iterate using an index to avoid re-searching via indexOf.
+      for (let i = 0; i < bankDateRows.length; i++) {
+        const target = bankDateRows[i];
+        const subsetIndices = this.findSubsetSumOptimized(
+          target,
+          bookkeepingDateRows
+        );
+        if (subsetIndices !== null) {
+          // Process the match.
+          this.matches().PushRow(associatedBankTransactions[i]);
+          // Remove the bank transaction using the current index.
+          bankDateRows.splice(i, 1);
+          associatedBankTransactions.splice(i, 1);
+
+          // Remove bookkeeping transactions.
+          // Sort indices in descending order to avoid index shifting during removal.
+          subsetIndices.sort((a, b) => b - a);
+          for (const idx of subsetIndices) {
+            bookkeepingDateRows.splice(idx, 1);
+            associatedBookkeepingTransactions.splice(idx, 1);
+          }
+          modified = true;
+          // Restart since arrays have changed.
+          break;
+        }
+      }
+    }
+
+    bookkeepingSheet.SetDateMapValue(date, associatedBookkeepingTransactions);
+    bookkeepingSheet.SetDateAmountMapValue(date, bookkeepingDateRows);
+    bankSheet.SetDateMapValue(date, associatedBankTransactions);
+    bankSheet.SetDateAmountMapValue(date, bankDateRows);
+  }
+
+  // Optimized subset sum using memoization.
+  findSubsetSumOptimized(target: number, numbers: number[]): number[] | null {
+    const memo = new Map<string, number[] | null>();
+
+    function backtrack(start: number, currentSum: number): number[] | null {
+      if (currentSum === target) {
+        return [];
+      }
+      // Use a key combining the starting index and current sum.
+      const key = start + '-' + currentSum;
+      if (memo.has(key)) {
+        return memo.get(key) || null;
+      }
+      // Prune if the sum overshoots (assuming all numbers are positive;
+      // adjust if negatives can occur).
+      if (
+        (target >= 0 && currentSum > target) ||
+        (target < 0 && currentSum < target)
+      ) {
+        memo.set(key, null);
+        return null;
+      }
+      for (let i = start; i < numbers.length; i++) {
+        const result = backtrack(i + 1, currentSum + numbers[i]);
+        if (result !== null) {
+          const solution = [i, ...result];
+          memo.set(key, solution);
+          return solution;
+        }
+      }
+      memo.set(key, null);
+      return null;
+    }
+
+    return backtrack(0, 0);
+  }
 
   public CheckBookkeepingSums() {}
 
